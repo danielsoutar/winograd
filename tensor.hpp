@@ -74,6 +74,8 @@ class Tensor {
     }
 
     std::vector<float> data() { return data_; }
+
+    void set_data(std::vector<float> data) { data_ = data; }
     TensorSizeStruct shape() { return shape_; }
 
     void print() {

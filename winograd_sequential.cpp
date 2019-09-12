@@ -32,76 +32,152 @@
  * In our case, we take the (i,j) 4x4 slice. This is done in row-major order.
  */
 std::vector<float> transform_input(std::vector<float> input, int channels, int height, int width, int padding, int tile_i, int tile_j) {
-  std::vector<float> tile(4 * 4 * channels);
+  std::vector<float> tile(4 * 4);
+  // std::vector<float> tile(4 * 4 * channels);
   int hw = height * width;
   int r = (0 - padding) + tile_i * 2;
   int c = (0 - padding) + tile_j * 2;
   int tile_size = 4;
-  for(int channel = 0; channel < channels; ++channel) {
-    int channel_offset = channel * hw;
-    int channel_tile_offset = channel * 16;
-    for(int input_i = r; input_i < r + tile_size; ++input_i) {
-      for(int input_j = c; input_j < c + tile_size; ++input_j) {
-        if(input_i > -1 && input_i < height && input_j > -1 && input_j < width)
-          tile[channel_tile_offset + (input_i - r) * 4 + input_j]
-            = input[channel_offset + input_i * width + input_j];
-        else
-          tile[channel_tile_offset + (input_i - r) * 4 + input_j] = 0.0f;
-      }
+  // for(int channel = 0; channel < channels; ++channel) {
+  //  int channel_offset = channel * hw;
+  //  int channel_tile_offset = channel * 16;
+  for(int input_i = r; input_i < r + tile_size; ++input_i) {
+    for(int input_j = c; input_j < c + tile_size; ++input_j) {
+      if(input_i > -1 && input_i < height && input_j > -1 && input_j < width)
+        tile[/*channel_tile_offset + */(input_i - r) * 4 + input_j]
+          = input[/*channel_offset + */input_i * width + input_j];
+      else
+        tile[/*channel_tile_offset + */(input_i - r) * 4 + input_j] = 0.0f;
     }
   }
+  // }
+  std::cout << "Current slice of input:\n";
+  for(int i = 0; i < 4; ++i) {
+    for(int j = 0; j < 4; ++j) {
+      std::cout << tile[i*4 + j] << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cout << "\n";
 
   // Now have the slices of the input. For each channel, perform the input transform.
   // TIME TO DO ADDITION
 #ifndef TILE
-#define TILE(X) tile[channel_tile_offset + X]
-  for(int channel = 0; channel < channels; ++channel) {
-    int channel_tile_offset = channel * 16;
-    int bd0 = TILE(0) - TILE(8);
-    int bd1 = TILE(1) - TILE(9);
-    int bd2 = TILE(2) - TILE(10);
-    int bd3 = TILE(3) - TILE(11);
+#define TILE(X) tile[X]
+//  for(int channel = 0; channel < channels; ++channel) {
+//    int channel_tile_offset = channel * 16;
+  float bd0 = TILE(0) - TILE(8);
+  float bd1 = TILE(1) - TILE(9);
+  float bd2 = TILE(2) - TILE(10);
+  float bd3 = TILE(3) - TILE(11);
+  float bd4 = TILE(4) + TILE(8);
+  float bd5 = TILE(5) + TILE(9);
+  float bd6 = TILE(6) + TILE(10);
+  float bd7 = TILE(7) + TILE(11);
+  float bd8 = TILE(8) - TILE(4);
+  float bd9 = TILE(9) - TILE(5);
+  float bd10 = TILE(10) - TILE(6);
+  float bd11 = TILE(11) - TILE(7);
+  float bd12 = TILE(4) - TILE(12);
+  float bd13 = TILE(5) - TILE(13);
+  float bd14 = TILE(6) - TILE(14);
+  float bd15 = TILE(7) - TILE(15);
 
-    TILE(0) = bd0 - bd2;
-    TILE(1) = bd1 + bd2;
-    TILE(2) = bd2 - bd1;
-    TILE(3) = bd1 - bd3;
 
-    int bd4 = TILE(4) + TILE(8);
-    int bd5 = TILE(5) + TILE(9);
-    int bd6 = TILE(6) + TILE(10);
-    int bd7 = TILE(7) + TILE(11);
+  TILE(0) = bd0 - bd2;
+  TILE(1) = bd1 + bd2;
+  TILE(2) = bd2 - bd1;
+  TILE(3) = bd1 - bd3;
 
-    TILE(4) = bd4 - bd6;
-    TILE(5) = bd5 + bd6;
-    TILE(6) = bd6 - bd5;
-    TILE(7) = bd5 - bd7;
+  TILE(4) = bd4 - bd6;
+  TILE(5) = bd5 + bd6;
+  TILE(6) = bd6 - bd5;
+  TILE(7) = bd5 - bd7;
 
-    int bd8 = TILE(8) - TILE(4);
-    int bd9 = TILE(9) - TILE(5);
-    int bd10 = TILE(10) - TILE(6);
-    int bd11 = TILE(11) - TILE(7);
+  TILE(8) = bd8 - bd10;
+  TILE(9) = bd9 + bd10;
+  TILE(10) = bd10 - bd9;
+  TILE(11) = bd9 - bd11;
 
-    TILE(8) = bd8 - bd10;
-    TILE(9) = bd9 + bd10;
-    TILE(10) = bd10 - bd9;
-    TILE(11) = bd9 - bd11;
-
-    int bd12 = TILE(4) - TILE(12);
-    int bd13 = TILE(5) - TILE(15);
-    int bd14 = TILE(6) - TILE(14);
-    int bd15 = TILE(7) - TILE(13);
-
-    TILE(12) = bd12 - bd14;
-    TILE(13) = bd13 + bd14;
-    TILE(14) = bd14 - bd13;
-    TILE(15) = bd13 - bd15;
-  }
+  TILE(12) = bd12 - bd14;
+  TILE(13) = bd13 + bd14;
+  TILE(14) = bd14 - bd13;
+  TILE(15) = bd13 - bd15;
+//  }
 #undef TILE
 #endif
 
   return tile;
 }
+
+/**
+ * Transform the filter for the Winograd algorithm. This means taking in a 3x3 filter
+ * to do convolutions with, and returning a Cx4x4 output, where C is the number of input channels.
+ *
+ * In our case, we take the c-th 3x3 input feature map. This is done in row-major order.
+ */
+std::vector<float> transform_filter(std::vector<float> filter, int channels, int c) {
+  std::vector<float> tile(4 * 4);
+  // for(int channel = 0; channel < channels; ++channel) {
+  //  int channel_offset = channel * hw;
+  //  int channel_tile_offset = channel * 16;
+
+  std::cout << "Current feature-map:\n";
+  for(int i = 0; i < 4; ++i) {
+    for(int j = 0; j < 4; ++j) {
+      std::cout << tile[i*4 + j] << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cout << "\n";
+
+  // Now have the slice of the filter. For each channel, perform the filter transform.
+  // TIME TO DO ADDITION AND DIVISION
+#ifndef TILE
+#define TILE(X) tile[X]
+#ifndef g
+#define g(X) filter[X]
+  float g0_g2 = (g(0) + g(2));
+  float g0_g6 = (g(0) + g(6));
+  float g0_g3_g6 = (g0_g6 + g(3));
+  float g2_g8 = (g(2) + g(8));
+  float g2_g5_g8 = (g2_g8 + g(5));
+  float g1_g7 = (g(1) + g(7));
+  float g1_g4_g7 = (g1_g7 + g(4));
+  float g0_g6_sub_g3 = (g0_g6 - g(3));
+  float g1_g7_sub_g4 = (g1_g7 - g(4));
+  float g2_g8_sub_g5 = g2_g8 - g(5);
+  float g6_g8 = (g(6) + g(8));
+  float g6_g7_g8 = (g6_g8 + g(7));
+  TILE(0) = g(0);
+  TILE(1) = (g0_g2 + g(1)) / 2;
+  TILE(2) = (g0_g2 - g(1)) / 2;
+  TILE(3) = g(2);
+  TILE(4) = g0_g3_g6 / 2;
+  TILE(5) = (g0_g3_g6 + g2_g5_g8 + g1_g4_g7) / 4;
+  TILE(6) = ((g0_g3_g6) - g1_g4_g7 + g2_g5_g8) / 4;
+  TILE(7) = g2_g5_g8 / 2;
+  TILE(8) = (g0_g6_sub_g3) / 2;
+  TILE(9) = (g0_g6_sub_g3 + g1_g7_sub_g4 + g2_g8_sub_g5) / 4;
+  TILE(10) = (g0_g6_sub_g3 - g1_g7_sub_g4 + g2_g8_sub_g5) / 4;
+  TILE(11) = g2_g8_sub_g5 / 2;
+  TILE(12) = g(6);
+  TILE(13) = g6_g7_g8 / 2;
+  TILE(14) = (g6_g8 - g(7)) / 2;
+  TILE(15) = g(8);
+#undef g
+#undef TILE
+#endif
+#endif
+
+  return tile;
+}
+
+std::vector<float> inverse_transform(std::vector<float> M) {
+  std::vector<float> Y;
+  return Y;
+}
+
 
 // Perform a 2D convolution using the Winograd transform
 Tensor conv2d(Tensor inp, Tensor fil, Conv2DParamPack conv2d_params) {
@@ -124,25 +200,35 @@ Tensor conv2d(Tensor inp, Tensor fil, Conv2DParamPack conv2d_params) {
   inp.print(0);
 
   std::vector<std::vector<float>> transformed_inputs(num_tiles_per_row * num_tiles_per_col);
-  for(int i = 0; i < 1; ++i) {
-    for(int j = 0; j < 1; ++j) {
-      transformed_inputs[i*num_tiles_per_row + j]
-        = transform_input(inp.data(), fil.shape()[1], inp.shape()[2], inp.shape()[3], conv2d_params.padding(), i, j);
-      for(int x = 0; x < 4; ++x) {
-        for(int y = 0; y < 4; ++y) {
-          std::cout << transformed_inputs[i*num_tiles_per_row + j][x*4 + y] << " ";
-        }
-        std::cout << "\n";
-      }
-      std::cout << "\n\n";
+//  for(int i = 0; i < 1; ++i) {
+//    for(int j = 0; j < 1; ++j) {
+  transformed_inputs[0] = transform_input(inp.data(), fil.shape()[1], inp.shape()[2], inp.shape()[3], conv2d_params.padding(), 0, 0);
+  for(int x = 0; x < 4; ++x) {
+    for(int y = 0; y < 4; ++y) {
+      std::cout << transformed_inputs[0][x*4 + y] << " ";
     }
+    std::cout << "\n";
   }
+  std::cout << "\n\n";
+//    }
+//  }
   // Transform filter (1x)
-  // ...
+  std::vector<std::vector<float>> transformed_filter(inp.shape()[1]);
+  transformed_filter[0] = transform_filter(fil.data(), inp.shape()[1], 0);
+  for(int x = 0; x < 4; ++x) {
+    for(int y = 0; y < 4; ++y) {
+      std::cout << transformed_filter[0][x*4 + y] << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cout << "\n\n";
   // Batched matrix-multiply
-  // ...
+  std::vector<float> M(4*4);
+  for(int i = 0; i < 16; ++i) 
+    M[i] = transformed_inputs[0][i] * transformed_filter[0][i];
   // Inverse transform (same number of times as input, since we have that many results to invert)
-  // ...
+  std::vector<float> Y = inverse_transform(M);
+  out.set_data(Y);
   // Done!
   return out;
 }
@@ -154,6 +240,7 @@ int main() {
   Tensor input(input_sizes), filter(filter_sizes);
   auto output = conv2d(input, filter, conv2dParams);
   auto out_shape = output.shape();
+  std::cout << "Output dimensions for convolution: \n";
   for (auto& dimension : out_shape.get_dimensions())
     std::cout << dimension << " ";
   std::cout << "\n";
