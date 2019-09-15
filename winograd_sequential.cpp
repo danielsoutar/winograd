@@ -1,4 +1,5 @@
-// winograd_sequential.cpp - Implementation of the Winograd transform for convolutions
+// winograd_sequential.cpp - Implementation of the Winograd transform for
+// convolutions.
 // Created by: Daniel Soutar
 #include "tensor.hpp"
 #include <iostream>
