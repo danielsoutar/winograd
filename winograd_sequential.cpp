@@ -33,8 +33,11 @@
  * In our case, we take the (i,j) 4x4 slice. This is done in row-major order.
  */
 std::vector<float> transform_input(std::vector<float> input,
-                                   TensorSizeStruct inp_shape, int E,
-                                   int padding, int tile_i, int tile_j) {
+                                   TensorSizeStruct inp_shape, int A, int B,
+                                   int E, int padding, int n_tiles_rows,
+                                   int n_tiles_cols) {
+  auto P = n_tiles_rows * n_tiles_cols;
+
   auto N = inp_shape[0];
   auto C = inp_shape[1];
   auto H = inp_shape[2];
@@ -42,90 +45,85 @@ std::vector<float> transform_input(std::vector<float> input,
 
   int HW = H * W;
 
-  std::vector<float> tile(E * N * C);
-
-  int r = (0 - padding) + tile_i * 2;
-  int c = (0 - padding) + tile_j * 2;
-
   int tile_size = 4;
 
-  for (int b = 0; b < N; ++b) {
-    for (int f = 0; f < C; ++f) {
-      for (int input_i = r; input_i < r + tile_size; ++input_i) {
-        for (int input_j = c; input_j < c + tile_size; ++input_j) {
-          auto idx = (input_i - r) * tile_size * N * C + (input_j - c) * N * C +
-                     b * C + f;
-          if (input_i > -1 && input_i < H && input_j > -1 && input_j < W)
-            tile[idx] = input[b * C * HW + f * HW + input_i * W + input_j];
-          else
-            tile[idx] = 0.0f;
+  std::vector<float> transformed_input(P * E * N * C);
+
+  for (int ti = 0; ti < n_tiles_rows; ++ti) {
+    for (int tj = 0; tj < n_tiles_cols; ++tj) {
+      int r = (0 - padding) + ti * 2;
+      int c = (0 - padding) + tj * 2;
+
+      auto tile_offset = ti * n_tiles_cols * E * N * C + tj * E * N * C;
+
+      for (int b = 0; b < N; ++b) {
+        for (int f = 0; f < C; ++f) {
+          for (int input_i = r; input_i < r + A; ++input_i) {
+            for (int input_j = c; input_j < c + B; ++input_j) {
+              auto idx =
+                  (input_i - r) * A * N * C + (input_j - c) * N * C + b * C + f;
+              if (input_i > -1 && input_i < H && input_j > -1 && input_j < W)
+                transformed_input[tile_offset + idx] =
+                    input[b * C * HW + f * HW + input_i * W + input_j];
+              else
+                transformed_input[tile_offset + idx] = 0.0f;
+            }
+          }
+        }
+      }
+      // Now have the slices of the input. For each channel, perform the input
+      // transform. TIME TO DO ADDITION
+#ifndef TILE
+#define TILE(X)                                                                \
+  transformed_input[ti * n_tiles_cols * E * N * C + tj * E * N * C +           \
+                    X * N * C + b * C + f]
+      for (int b = 0; b < N; ++b) {
+        for (int f = 0; f < C; ++f) {
+          float bd0 = TILE(0) - TILE(8);
+          float bd1 = TILE(1) - TILE(9);
+          float bd2 = TILE(2) - TILE(10);
+          float bd3 = TILE(3) - TILE(11);
+          float bd4 = TILE(4) + TILE(8);
+          float bd5 = TILE(5) + TILE(9);
+          float bd6 = TILE(6) + TILE(10);
+          float bd7 = TILE(7) + TILE(11);
+          float bd8 = TILE(8) - TILE(4);
+          float bd9 = TILE(9) - TILE(5);
+          float bd10 = TILE(10) - TILE(6);
+          float bd11 = TILE(11) - TILE(7);
+          float bd12 = TILE(4) - TILE(12);
+          float bd13 = TILE(5) - TILE(13);
+          float bd14 = TILE(6) - TILE(14);
+          float bd15 = TILE(7) - TILE(15);
+
+          TILE(0) = bd0 - bd2;
+          TILE(1) = bd1 + bd2;
+          TILE(2) = bd2 - bd1;
+          TILE(3) = bd1 - bd3;
+
+          TILE(4) = bd4 - bd6;
+          TILE(5) = bd5 + bd6;
+          TILE(6) = bd6 - bd5;
+          TILE(7) = bd5 - bd7;
+
+          TILE(8) = bd8 - bd10;
+          TILE(9) = bd9 + bd10;
+          TILE(10) = bd10 - bd9;
+          TILE(11) = bd9 - bd11;
+
+          TILE(12) = bd12 - bd14;
+          TILE(13) = bd13 + bd14;
+          TILE(14) = bd14 - bd13;
+          TILE(15) = bd13 - bd15;
         }
       }
     }
   }
 
-  // std::cout << "Current slice of input at tile (" << tile_i << ", " << tile_j
-  // << "):\n"; for(int ti = 0; ti < tile_size; ++ti) {
-  //   for(int tj = 0; tj < tile_size; ++tj) {
-  //     for(int b = 0; b < N; ++b) {
-  //       for(int f = 0; f < C; ++f) {
-  //         std::cout << std::setw(4) << tile[ti * tile_size * N * C + tj * N *
-  //         C + b * C + f] << " ";
-  //       }
-  //       std::cout << "\n";
-  //     }
-  //     std::cout << "\n";
-  //   }
-  // }
-
-  // Now have the slices of the input. For each channel, perform the input
-  // transform. TIME TO DO ADDITION
-#ifndef TILE
-#define TILE(X) tile[X * N * C + b * C + f]
-  for (int b = 0; b < N; ++b) {
-    for (int f = 0; f < C; ++f) {
-      float bd0 = TILE(0) - TILE(8);
-      float bd1 = TILE(1) - TILE(9);
-      float bd2 = TILE(2) - TILE(10);
-      float bd3 = TILE(3) - TILE(11);
-      float bd4 = TILE(4) + TILE(8);
-      float bd5 = TILE(5) + TILE(9);
-      float bd6 = TILE(6) + TILE(10);
-      float bd7 = TILE(7) + TILE(11);
-      float bd8 = TILE(8) - TILE(4);
-      float bd9 = TILE(9) - TILE(5);
-      float bd10 = TILE(10) - TILE(6);
-      float bd11 = TILE(11) - TILE(7);
-      float bd12 = TILE(4) - TILE(12);
-      float bd13 = TILE(5) - TILE(13);
-      float bd14 = TILE(6) - TILE(14);
-      float bd15 = TILE(7) - TILE(15);
-
-      TILE(0) = bd0 - bd2;
-      TILE(1) = bd1 + bd2;
-      TILE(2) = bd2 - bd1;
-      TILE(3) = bd1 - bd3;
-
-      TILE(4) = bd4 - bd6;
-      TILE(5) = bd5 + bd6;
-      TILE(6) = bd6 - bd5;
-      TILE(7) = bd5 - bd7;
-
-      TILE(8) = bd8 - bd10;
-      TILE(9) = bd9 + bd10;
-      TILE(10) = bd10 - bd9;
-      TILE(11) = bd9 - bd11;
-
-      TILE(12) = bd12 - bd14;
-      TILE(13) = bd13 + bd14;
-      TILE(14) = bd14 - bd13;
-      TILE(15) = bd13 - bd15;
-    }
-  }
 #undef TILE
 #endif
 
-  return tile;
+  return transformed_input;
 }
 
 /**
@@ -185,16 +183,6 @@ std::vector<float> transform_filter(std::vector<float> filter, int R, int S,
     }
   }
 
-  // std::cout << "Current feature-map:\n";
-  // for (int f = 0; f < F; ++f) {
-  //   for (int c = 0; c < C; ++c) {
-  //     for (int i = 0; i < E; ++i) {
-  //       std::cout << std::setw(5) << tile[f * C * E + c * E + i] << " ";
-  //     }
-  //     std::cout << "\n";
-  //   }
-  // }
-
   return tile;
 }
 
@@ -238,21 +226,17 @@ std::vector<float> inverse_transform(std::vector<float> M, int E,
 #undef M
 #endif
 
-  std::cout << "t_i = " << t_i << "\n";
-
   return Y;
 }
 
 // Perform a 2D convolution using the Winograd transform
 Tensor conv2d(Tensor inp, Tensor fil, Conv2DParamPack conv2d_params) {
-  // Assume M and N are fixed, likewise R and S
   int m = 2, n = 2;
   int r = 3, s = 3;
 
   unsigned int A = m + r - 1;
   unsigned int B = n + s - 1;
 
-  // Variables for the sizes of the inputs
   int batch_size = inp.shape()[0];
   int in_channels = inp.shape()[1];
   int in_height = inp.shape()[2];
@@ -263,10 +247,8 @@ Tensor conv2d(Tensor inp, Tensor fil, Conv2DParamPack conv2d_params) {
   int fil_height = fil.shape()[2];
   int fil_width = fil.shape()[3];
 
-  // Initialise an output tensor based on inputs and operation.
   Tensor out(inp, fil, conv2d_params);
-  // Transform input (however many times it can be broken down by a 4x4 tile
-  // with stride of 2)
+
   TensorSizeStruct tile_size(std::vector<unsigned int>{1, 1, A, B});
   Conv2DParamPack conv2d_params_for_tiles(
       std::vector<unsigned int>{2, conv2d_params.padding(), A});
@@ -274,41 +256,30 @@ Tensor conv2d(Tensor inp, Tensor fil, Conv2DParamPack conv2d_params) {
   auto n_tiles_rows =
       conv2d_params_for_tiles.get_out_sizes(inp.shape(), tile_size)[2];
   auto n_tiles_cols = n_tiles_rows;
-  int T = n_tiles_rows * n_tiles_cols;
+  int P = n_tiles_rows * n_tiles_cols;
 
-  // inp.print();
-
-  // We want an input of shape [T, E, N, C], where E denotes the number of
-  // elements in the intermediate tensor to do a pointwise multiply, and T the
-  // total number of tiles. C denotes the number of input channels.
-  std::vector<std::vector<float>> U(n_tiles_rows * n_tiles_cols);
   int E = A * B;
-  for (int i = 0; i < n_tiles_rows; ++i)
-    for (int j = 0; j < n_tiles_cols; ++j)
-      U[i * n_tiles_cols + j] = transform_input(inp.data(), inp.shape(), E,
-                                                conv2d_params.padding(), i, j);
 
-  // Transform filter (1x)
-  fil.print();
-
+  std::vector<float> U =
+      transform_input(inp.data(), inp.shape(), A, B, E, conv2d_params.padding(),
+                      n_tiles_rows, n_tiles_cols);
   std::vector<float> V =
       transform_filter(fil.data(), r, s, in_channels, out_channels, A);
 
   // Batched matrix-multiply per tile, per block of U and V
-  std::vector<float> M(T * E * batch_size * out_channels);
+  std::vector<float> M(P * E * batch_size * out_channels);
   std::fill(M.begin(), M.end(), 0);
-  for (int t = 0; t < T; ++t)
+  for (int t = 0; t < P; ++t)
     for (int e = 0; e < E; ++e)
       for (int b = 0; b < batch_size; ++b)
         for (int c = 0; c < in_channels; ++c)
           for (int f = 0; f < out_channels; ++f)
             M[t * E * batch_size * out_channels +
               e * batch_size * out_channels + b * out_channels + f] +=
-                U[t][e * batch_size * in_channels + b * in_channels + c] *
+                U[t * E * batch_size * in_channels +
+                  e * batch_size * in_channels + b * in_channels + c] *
                 V[c * E * out_channels + e * out_channels + f];
 
-  // Inverse transform (same number of times as input, since we have that many
-  // results to invert)
   auto out_shape = out.shape();
   std::vector<float> Y = inverse_transform(M, E, out.shape(), n_tiles_rows);
 
@@ -324,9 +295,9 @@ Tensor conv2d(Tensor inp, Tensor fil, Conv2DParamPack conv2d_params) {
 }
 
 int main() {
-  Conv2DParamPack conv2dParams(std::vector<unsigned int>{1, 0, 3});
-  unsigned int N = 1, C = 1, H = 64, W = 64;
-  unsigned int F = 2, Fh = 3, Fw = 3;
+  Conv2DParamPack conv2dParams(std::vector<unsigned int>{1, 1, 3});
+  unsigned int N = 1, C = 1, H = 8, W = 8;
+  unsigned int F = 1, Fh = 3, Fw = 3;
   TensorSizeStruct input_sizes{std::vector<unsigned int>{N, C, H, W}};
   TensorSizeStruct filter_sizes{std::vector<unsigned int>{F, C, Fh, Fw}};
   Tensor input(input_sizes), filter(filter_sizes);
