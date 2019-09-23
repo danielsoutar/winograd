@@ -12,7 +12,7 @@ def conv2d_multi_channel(inp, w, padding=0):
     Returns a result with shape (out_channels, out_height, out_width).
     """
     batch, in_channels, in_height, in_width = inp.shape
-    out_channels, _, f_height, f_width = fil.shape
+    out_channels, _, f_height, f_width = w.shape
 
     assert in_channels == w.shape[1]
 
