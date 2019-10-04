@@ -82,7 +82,7 @@ public:
       for (int c = 0; c < dims[1]; ++c) {
         for (int h = 0; h < dims[2]; ++h) {
           for (int w = 0; w < dims[3]; ++w)
-            std::cout << std::setw(4)
+            std::cout << std::setw(6)
                       << data_[n * dims[1] * dims[2] * dims[3] +
                                c * dims[2] * dims[3] + h * dims[3] + w]
                       << " ";
@@ -90,9 +90,7 @@ public:
         }
         std::cout << "\n";
       }
-      std::cout << "\n";
     }
-    std::cout << "\n";
   }
 
   void print(int c) {
